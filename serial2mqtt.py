@@ -5,26 +5,33 @@ import serial
 from serial.threaded import ReaderThread, LineReader
 import time
 import argparse
+from collections import namedtuple
+
 
 class MySerialReader(LineReader):
     TERMINATOR = b'\n'
-    I_LOG_MESSAGE = '9'
+    SerialMessage = namedtuple('SerialMessage', 'nodeid sensorid command ack type payload')
 
     def __init__(self, rootTopic, mqttClient):
         super(MySerialReader, self).__init__()
         self._rootTopic = rootTopic
         self._mqttClient = mqttClient
 
+    def is_gateway_message(self, serialMessage):
+        return serialMessage.nodeid == '0'
+
     def handle_line(self, line):
         print(line)
-        fields = line.split(';')
-        if len(fields) != 6:
+        try:
+            msg = self.SerialMessage(*line.split(';', 6))
+            if self.is_gateway_message(msg):
             return
-        if fields[4] == self.I_LOG_MESSAGE:
+        except TypeError as parseError:
+            print('Can\'t parse serial message: "%s". Reason: %s' % (line, parseError))
             return
-        topic = "/".join([self._rootTopic+'out'] + fields[:-1])
-        print('sending topic: %s. payload: %s' % (topic, fields[-1]))
-        self._mqttClient.publish(topic, fields[-1])
+        mqttPublishTopic = "/".join([self._rootTopic+'out', msg.nodeid, msg.sensorid, msg.command, msg.ack])
+        print('MQTT publishing topic="%s" payload="%s"' % (mqttPublishTopic, msg.payload))
+        self._mqttClient.publish(mqttPublishTopic, msg.payload)
 
 class Serial2MQTT:
     def __init__(self, device, host, port, rootTopic, username=None, password=None):
@@ -45,10 +52,10 @@ class Serial2MQTT:
 
     def _mqtt_on_message(self, client, obj, msg):
         payload = msg.payload.decode("utf-8")
-        print ('received topic: %s. payload: %s' % (msg.topic, payload))
+        print ('Received topic: %s. payload: %s' % (msg.topic, payload))
         fields = msg.topic.split('/')
         data = ";".join(fields[1:] + [payload])
-        print ('writing msg: %s' % data)
+        print ('Writing msg: %s' % data)
         self._serialProtocol.write_line(data)
 
     def run(self):
@@ -77,5 +84,6 @@ try:
     while True:
         time.sleep(100)
 except:
+    print('Stopping...')
     serial2Mqtt.stop()
 
