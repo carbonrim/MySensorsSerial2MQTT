@@ -38,7 +38,7 @@ class Serial2MQTT:
         self._serialProtocol = None
 
     def _mqtt_on_connect(self, client, userdata, flags, rc):
-        print("Connected with result code " + str(rc))
+        print("Connected with result code=%s: %s " % (rc, mqtt.connack_string(rc)))
         self._mqttClient.subscribe(self._rootTopic + "in/#")
 
     def _mqtt_on_message(self, client, obj, msg):
