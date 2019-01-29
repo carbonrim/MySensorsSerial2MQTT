@@ -25,7 +25,7 @@ class MySerialReader(LineReader):
         try:
             msg = self.SerialMessage(*line.split(';', 6))
             if self.is_gateway_message(msg):
-            return
+                return
         except TypeError as parseError:
             print('Can\'t parse serial message: "%s". Reason: %s' % (line, parseError))
             return
@@ -34,7 +34,7 @@ class MySerialReader(LineReader):
         self._mqttClient.publish(mqttPublishTopic, msg.payload)
 
 class Serial2MQTT:
-    def __init__(self, device, host, port, rootTopic, username=None, password=None):
+    def __init__(self, device, baudrate, host, port, rootTopic, username=None, password=None):
         self._rootTopic = rootTopic
         self._mqttClient = mqtt.Client()
         self._mqttClient.on_connect = self._mqtt_on_connect
@@ -42,7 +42,7 @@ class Serial2MQTT:
         if username is not None:
             self._mqttClient.username_pw_set(username, password)
         self._mqttClient.connect_async(host, port)
-        ser = serial.Serial(args.device, 38400, timeout=1)
+        ser = serial.Serial(args.device, baudrate, timeout=1)
         self._serialClient = ReaderThread(ser, lambda: MySerialReader(self._rootTopic, self._mqttClient))
         self._serialProtocol = None
 
@@ -70,6 +70,7 @@ class Serial2MQTT:
 parser = argparse.ArgumentParser()
 parser.add_argument('--broker-host', default='localhost')
 parser.add_argument('--broker-port', type=int, default=1883)
+parser.add_argument('--baudrate', type=int, default=38400)
 parser.add_argument('--username')
 parser.add_argument('--password')
 parser.add_argument('--device', required=True)
@@ -77,7 +78,7 @@ args = parser.parse_args()
 
 rootTopic = 'mySensors'
 
-serial2Mqtt = Serial2MQTT(args.device, args.broker_host, args.broker_port, rootTopic, args.username, args.password)
+serial2Mqtt = Serial2MQTT(args.device, args.baudrate, args.broker_host, args.broker_port, rootTopic, args.username, args.password)
 serial2Mqtt.run()
 
 try:
