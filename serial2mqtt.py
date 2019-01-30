@@ -1,18 +1,20 @@
 #!/usr/bin/python3
 
+from collections import namedtuple
+from serial.threaded import ReaderThread, LineReader
+import argparse
+import logging
 import paho.mqtt.client as mqtt
 import serial
-from serial.threaded import ReaderThread, LineReader
+import sys
 import time
-import argparse
-from collections import namedtuple
-
 
 class MySerialReader(LineReader):
     TERMINATOR = b'\n'
     SerialMessage = namedtuple('SerialMessage', 'nodeid sensorid command ack type payload')
 
     def __init__(self, rootTopic, mqttClient):
+        self.log = logging.getLogger(self.__class__.__name__)
         super(MySerialReader, self).__init__()
         self._rootTopic = rootTopic
         self._mqttClient = mqttClient
@@ -21,20 +23,21 @@ class MySerialReader(LineReader):
         return serialMessage.nodeid == '0'
 
     def handle_line(self, line):
-        print(line)
+        self.log.debug(line)
         try:
             msg = self.SerialMessage(*line.split(';', 6))
             if self.is_gateway_message(msg):
                 return
         except TypeError as parseError:
-            print('Can\'t parse serial message: "%s". Reason: %s' % (line, parseError))
+            self.log.warning('Can\'t parse serial message: "%s". Reason: %s', line, parseError)
             return
         mqttPublishTopic = "/".join([self._rootTopic+'out', msg.nodeid, msg.sensorid, msg.command, msg.ack])
-        print('MQTT publishing topic="%s" payload="%s"' % (mqttPublishTopic, msg.payload))
+        self.log.info('MQTT publishing topic="%s" payload="%s"', mqttPublishTopic, msg.payload)
         self._mqttClient.publish(mqttPublishTopic, msg.payload)
 
 class Serial2MQTT:
     def __init__(self, device, baudrate, host, port, rootTopic, username=None, password=None):
+        self.log = logging.getLogger(self.__class__.__name__)
         self._rootTopic = rootTopic
         self._mqttClient = mqtt.Client()
         self._mqttClient.on_connect = self._mqtt_on_connect
@@ -47,15 +50,15 @@ class Serial2MQTT:
         self._serialProtocol = None
 
     def _mqtt_on_connect(self, client, userdata, flags, rc):
-        print("Connected with result code=%s: %s " % (rc, mqtt.connack_string(rc)))
+        self.log.info("Connected with result code=%s: %s ", rc, mqtt.connack_string(rc))
         self._mqttClient.subscribe(self._rootTopic + "in/#")
 
     def _mqtt_on_message(self, client, obj, msg):
         payload = msg.payload.decode("utf-8")
-        print ('Received topic: %s. payload: %s' % (msg.topic, payload))
+        self.log.info('Received topic: %s. payload: %s', msg.topic, payload)
         fields = msg.topic.split('/')
         data = ";".join(fields[1:] + [payload])
-        print ('Writing msg: %s' % data)
+        self.log.info('Writing msg: %s', data)
         self._serialProtocol.write_line(data)
 
     def run(self):
@@ -71,10 +74,14 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--broker-host', default='localhost')
 parser.add_argument('--broker-port', type=int, default=1883)
 parser.add_argument('--baudrate', type=int, default=38400)
+parser.add_argument('--debug', action='store_true', default=False)
 parser.add_argument('--username')
 parser.add_argument('--password')
 parser.add_argument('--device', required=True)
 args = parser.parse_args()
+
+logging.basicConfig(level=logging.DEBUG if args.debug else logging.WARNING)
+log = logging.getLogger(sys.modules['__main__'].__file__)
 
 rootTopic = 'mySensors'
 
@@ -85,6 +92,6 @@ try:
     while True:
         time.sleep(100)
 except:
-    print('Stopping...')
+    log.info('Stopping...')
     serial2Mqtt.stop()
 
