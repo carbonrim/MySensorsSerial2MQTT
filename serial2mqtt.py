@@ -1,13 +1,25 @@
 #!/usr/bin/python3
 
 from collections import namedtuple
-from serial.threaded import ReaderThread, LineReader
+from serial.threaded import LineReader
+from watchedserial import WatchedReaderThread
 import argparse
 import logging
 import paho.mqtt.client as mqtt
 import serial
 import sys
 import time
+
+class MyWatchedReaderThread(WatchedReaderThread):
+    def __init__(self, serial_instance, protocol_factory):
+        super(MyWatchedReaderThread, self).__init__(serial_instance, protocol_factory)
+        self.log = logging.getLogger(self.__class__.__name__)
+
+    def handle_reconnect(self):
+        self.log.warning('Device reconnected')
+
+    def handle_disconnect(self, error):
+        self.log.warning('Device disconnected. Reason: %s', str(error))
 
 class MySerialReader(LineReader):
     TERMINATOR = b'\n'
@@ -46,8 +58,16 @@ class Serial2MQTT:
         if username is not None:
             self._mqttClient.username_pw_set(username, password)
         self._mqttClient.connect_async(host, port)
-        ser = serial.Serial(args.device, baudrate, timeout=1)
-        self._serialClient = ReaderThread(ser, lambda: MySerialReader(self._mqttPublishTopic, self._mqttClient))
+        isSerialOpen = False
+        while not isSerialOpen:
+            try:
+                ser = serial.Serial(device, baudrate, timeout=1)
+                isSerialOpen = True
+            except serial.SerialException as error:
+                self.log.debug('Cann\'t open %s: %s', device, error)
+                self.log.warning('Waiting for device %s to connect', device)
+            time.sleep(2)
+        self._serialClient = MyWatchedReaderThread(ser, lambda: MySerialReader(self._mqttPublishTopic, self._mqttClient))
         self._serialProtocol = None
 
     def _mqtt_on_connect(self, client, userdata, flags, rc):
