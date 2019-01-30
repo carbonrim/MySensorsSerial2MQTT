@@ -98,14 +98,22 @@ parser.add_argument('--mqtt-publish-topic', default='mysensors-out')
 parser.add_argument('--mqtt-subscribe-topic', default='mysensors-in')
 parser.add_argument('--broker-port', type=int, default=1883)
 parser.add_argument('--baudrate', type=int, default=38400)
-parser.add_argument('--debug', action='store_true', default=False)
+parser.add_argument('--log-debug', action='store_true', default=False)
+parser.add_argument('--log-info', action='store_true', default=False)
 parser.add_argument('--username')
 parser.add_argument('--password')
 parser.add_argument('--device', required=True)
 args = parser.parse_args()
 
 # configure logging
-logging.basicConfig(level=logging.DEBUG if args.debug else logging.WARNING)
+if args.log_debug:
+    logLevel = logging.DEBUG
+elif args.log_info:
+    logLevel = logging.INFO
+else:
+    logLevel = logging.WARNING
+
+logging.basicConfig(level=logLevel)
 log = logging.getLogger(sys.modules['__main__'].__file__)
 
 # start serial2mqtt conversion
