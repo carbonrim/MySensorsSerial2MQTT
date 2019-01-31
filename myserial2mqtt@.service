@@ -1,0 +1,12 @@
+[Unit]
+Description=MySensors Serial Gateway to MQTT daemon %I
+Requires=network.target
+
+[Service]
+Environment=PYTHONUNBUFFERED=1
+WorkingDirectory=/opt/MySensorsSerial2MQTT
+ExecStart=/opt/MySensorsSerial2MQTT/bin/python3 /opt/MySensorsSerial2MQTT/serial2mqtt.py --device /dev/%I
+User=mysensors
+
+[Install]
+WantedBy=multi-user.target
