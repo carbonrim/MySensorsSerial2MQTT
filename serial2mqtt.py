@@ -43,7 +43,7 @@ class MySerialReader(LineReader):
         except TypeError as parseError:
             self.log.warning('Can\'t parse serial message: "%s". Reason: %s', line, parseError)
             return
-        mqttPublishTopic = "/".join([self._mqttPublishTopic, msg.nodeid, msg.sensorid, msg.command, msg.ack])
+        mqttPublishTopic = "/".join([self._mqttPublishTopic, msg.nodeid, msg.sensorid, msg.command, msg.ack, msg.type])
         self.log.info('MQTT publishing topic="%s" payload="%s"', mqttPublishTopic, msg.payload)
         self._mqttClient.publish(mqttPublishTopic, msg.payload)
 
